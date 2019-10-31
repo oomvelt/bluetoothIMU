@@ -1,7 +1,6 @@
 joblib==0.13.2
 numpy==1.17.0
 pandas==0.25.0
-pkg-resources==0.0.0
 PyBluez==0.22
 pygame==1.9.6
 pyserial==3.4

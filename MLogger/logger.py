@@ -19,6 +19,7 @@ import json
 import datetime
 import zipfile
 import glob
+import os
 
 
 def sync_to_uq(ser):
@@ -213,8 +214,8 @@ def acquire_data(sample_freq, capture_window, queue):
                                'desync_count': desync_count}
 
                 # Uncomment this to print the raw x-axis accel values for debugging.
-                #print(accel[0])
-                #print(window_dict['imu_timestamp'])
+                # print(accel[0])
+                # print(window_dict['imu_timestamp'])
 
                 # Clear the temporary measurement buffers.
 
@@ -224,13 +225,11 @@ def acquire_data(sample_freq, capture_window, queue):
                 queue.put(window_dict)
 
 
-def log_data(sample_freq, imu_queue):
+def log_data(imu_queue):
     """
 
-    :type sample_freq: int
-    :param sample_freq: Sampling frequency in Hz
-    :type queue: Multiprocessing Queue
-    :param queue: detect_events() reads from this queue to acquire batches of IMU data captured by the acquire_data()
+    :type imu_queue: Multiprocessing Queue
+    :param imu_queue: log_data() reads from this queue to acquire batches of IMU data captured by the acquire_data()
                   process.
     :return: None
     """
@@ -238,26 +237,20 @@ def log_data(sample_freq, imu_queue):
     pygame.init()
     pygame.camera.init()
 
-    cam = pygame.camera.Camera("/dev/video0",(640,480))
+    cam = pygame.camera.Camera("/dev/video0", (640, 480))
     cam.start()
-    #this_image = cam.get_image()
     
     image_array = []
     camera_timestamp_array = []
     image_capture_count = 0
-    imgString = io.BytesIO()
     
     chart = collections.deque(201*[0], 201)
 
-
-    graph = sg.Graph(canvas_size=(400,200), graph_bottom_left=(-52,-52), graph_top_right=(52,52),
+    graph = sg.Graph(canvas_size=(400, 200), graph_bottom_left=(-52, -52), graph_top_right=(52, 52),
                      background_color='white', key='chart', float_values=True)
 
-
-    # detect_events() blocks on the queue read, so data processing rate is driven by the rate that
-
     layout = [[sg.Image(key='image', filename='oomvelt.png')],
-              [graph, sg.Multiline(key='notes', default_text='', size=(45,5), do_not_clear=True)],
+              [graph, sg.Multiline(key='notes', default_text='', size=(45, 5), do_not_clear=True)],
               [sg.Button('Log', size=(10, 1), font='Helvetica 14')],
               [sg.Button('Exit', size=(10, 1), font='Helvetica 14')]]
 
@@ -266,33 +259,30 @@ def log_data(sample_freq, imu_queue):
                        location=(800, 400))
 
     window.Layout(layout).Finalize()
-    
 
     accel = [[] for i in range(3)]
     w_vel = [[] for i in range(3)]
     mag_angle = [[] for i in range(3)]
     imu_timestamp = []
     desync_count = 0
-    
 
     logger_dict = {'accel': accel,
-                               'w_vel': w_vel,
-                               'mag_angle': mag_angle,
-                               'imu_timestamp': imu_timestamp,
-                               'desync_count': desync_count}
+                   'w_vel': w_vel,
+                   'mag_angle': mag_angle,
+                   'imu_timestamp': imu_timestamp,
+                   'desync_count': desync_count}
 
     log_state = False
-    #GUI update loop
+    # GUI update loop
     logging_done = False
     loop_count = 0
     while not logging_done:
-       loop_count += 1
+        loop_count += 1
            
-       done_reading_IMU_queue = False
+        done_reading_IMU_queue = False
        
-       while not done_reading_IMU_queue:
+        while not done_reading_IMU_queue:
 
-    
             try: 
                 latest_imu_data_dict = imu_queue.get(False)
 
@@ -307,9 +297,9 @@ def log_data(sample_freq, imu_queue):
                     print("WARNING: stale data detected. Skipping data...")
                     continue
 
-                #If we are in the logging state, append the last batch of collected logger data to the logger dict.
+                # If we are in the logging state, append the last batch of collected logger data to the logger dict.
 
-                if log_state == True:
+                if log_state:
                     
                     for item in latest_imu_data_dict.keys():
                         
@@ -320,63 +310,61 @@ def log_data(sample_freq, imu_queue):
                             
                 else:
                     
-                    #Add the latest IMU element to the stripchart's data structure.
+                    # Add the latest IMU element to the stripchart's data structure.
                     for item in latest_imu_data_dict['w_vel'][0]:
                         chart.appendleft(item)
                         chart.pop()
                     
                     graph.Erase()
-                    for x in range(0,200):
-                        y=(chart[x]/10)
-                        graph.DrawCircle((x-100,y), 1, line_color='blue', fill_color='blue')
-            #If the queue throws Empty, we've read everything and can continue on.            
+                    for x in range(0, 200):
+                        y = (chart[x]/10)
+                        graph.DrawCircle((x-100, y), 1, line_color='blue', fill_color='blue')
+            # If the queue throws Empty, we've read everything and can continue on.
             except queue.Empty:
                 done_reading_IMU_queue = True       
         
-       if log_state == True:
-           this_image = cam.get_image()
-           camera_timestamp_array.append(time.clock_gettime(time.CLOCK_MONOTONIC_RAW))
-           image_array.append(this_image)
-           image_capture_count += 1
+        if log_state:
+            this_image = cam.get_image()
+            camera_timestamp_array.append(time.clock_gettime(time.CLOCK_MONOTONIC_RAW))
+            image_array.append(this_image)
+            image_capture_count += 1
            
-       else:
-           this_image = cam.get_image()
-           #Note: I couldn't find a way to get PySImpleGUI's Image class to accept a pygame binary string,
-           #no matter how I massaged it. As a workaround, I am currently saving each image out as a .png file
-           #to /dev/shm, which should be ramdisk, and loading it in below. This does involve OS calls, which are
-           #likely slowing things down. Only used during the pre-logging phase, though.
-           pygame.image.save(this_image, "/dev/shm/tmp.png")
+        else:
+            this_image = cam.get_image()
+            # Note: I couldn't find a way to get PySImpleGUI's Image class to accept a pygame binary string,
+            # no matter how I massaged it. As a workaround, I am currently saving each image out as a .png file
+            # to /dev/shm, which should be ramdisk, and loading it in below. This does involve OS calls, which are
+            # likely slowing things down. Only used during the pre-logging phase, though.
+            pygame.image.save(this_image, "/dev/shm/tmp.png")
 
-                        
-       if image_capture_count >= 10:
-           logging_done = True
-           print("DEBUG: logging done...")
-           logger_dict['camera_timestamp'] = camera_timestamp_array
-           for idx, item in enumerate(image_array):
-               pygame.image.save(item, str("image" + str(idx) + ".png"))
-           log_timestamp = str(datetime.datetime.now())
-           with open('logger_dict_' + log_timestamp + '.json', 'w') as fp:
-               json.dump(logger_dict, fp)
-           archive = zipfile.ZipFile("log_" + log_timestamp + ".zip", 'w')
-           archive.write("logger_dict_" + log_timestamp + ".json")
-           for image_file in glob.glob('./image*.png'):
-               archive.write(image_file)
-           archive.close()
-           
-               
-       event, values = window.Read(timeout=0, timeout_key='timeout')
-       
-       if log_state == False:
-           window.Element('image').Update(filename="/dev/shm/tmp.png")
-           logger_dict['notes'] = window.Element('notes').Get()
+        if image_capture_count >= 10:
+            logging_done = True
+            print("DEBUG: logging done...")
+            logger_dict['camera_timestamp'] = camera_timestamp_array
+            for idx, item in enumerate(image_array):
+                pygame.image.save(item, str("image" + str(idx) + ".png"))
+            log_timestamp = datetime.datetime.strftime(datetime.datetime.now(), "%m-%d-%Y-%H-%M-%S")
+            with open('logger_dict_' + log_timestamp + '.json', 'w') as fp:
+                json.dump(logger_dict, fp)
+            archive = zipfile.ZipFile("log_" + log_timestamp + ".zip", 'w')
+            archive.write("logger_dict_" + log_timestamp + ".json")
+            os.remove("logger_dict_" + log_timestamp + ".json")
+            for image_file in glob.glob('./image*.png'):
+                archive.write(image_file)
+                os.remove(image_file)
+            archive.close()
 
-       if event == 'Exit' or event is None:
-           cam.stop()
-           sys.exit(0)
-       elif event == 'Log':
-           log_state = True
+        event, values = window.Read(timeout=0, timeout_key='timeout')
 
+        if log_state == False:
+            window.Element('image').Update(filename="/dev/shm/tmp.png")
+            logger_dict['notes'] = window.Element('notes').Get()
 
+        if event == 'Exit' or event is None:
+            cam.stop()
+            sys.exit(0)
+        elif event == 'Log':
+            log_state = True
 
 
 def main():
@@ -392,7 +380,6 @@ def main():
 
     IMU_data_queue = Queue()
 
-
     # Spawn acquire_data() in a separate process, so that IMU data acquisition won't be delayed by the data processing
     # in detect_events(). acquire_data() and detect_events() are the producer and consumer in a producer-consumer
     # design pattern.
@@ -401,7 +388,8 @@ def main():
     acquire_data_p.daemon = True
     acquire_data_p.start()
 
-    log_data(default_sample_freq, IMU_data_queue)
+    log_data(IMU_data_queue)
+
 
 if __name__ == "__main__":
     main()
