@@ -337,19 +337,19 @@ def log_data(imu_queue):
             # likely slowing things down. Only used during the pre-logging phase, though.
             pygame.image.save(this_image, "/dev/shm/tmp.png")
 
-        if image_capture_count >= 10:
+        if image_capture_count >= 400:
             logging_done = True
             print("DEBUG: logging done...")
-            logger_dict['camera_timestamp'] = camera_timestamp_array
-            for idx, item in enumerate(image_array):
-                pygame.image.save(item, str("image" + str(idx) + ".png"))
+            logger_dict['camera_timestamp'] = camera_timestamp_array       
             log_timestamp = datetime.datetime.strftime(datetime.datetime.now(), "%m-%d-%Y-%H-%M-%S")
             with open('logger_dict_' + log_timestamp + '.json', 'w') as fp:
                 json.dump(logger_dict, fp)
             archive = zipfile.ZipFile("log_" + log_timestamp + ".zip", 'w')
             archive.write("logger_dict_" + log_timestamp + ".json")
             os.remove("logger_dict_" + log_timestamp + ".json")
-            for image_file in glob.glob('./image*.png'):
+            for idx, item in enumerate(image_array):
+                image_file = str("image" + str(idx) + ".png")
+                pygame.image.save(item, image_file)               
                 archive.write(image_file)
                 os.remove(image_file)
             archive.close()
