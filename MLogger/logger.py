@@ -348,7 +348,7 @@ def log_data(imu_queue):
 
         if image_capture_count >= 400:
             logging_done = True
-            print("INFO: logging done...")
+            print("INFO: logging done. Archiving...")
             logger_dict['camera_timestamp'] = camera_timestamp_array       
             log_timestamp = datetime.datetime.strftime(datetime.datetime.now(), "%m-%d-%Y-%H-%M-%S")
             with open('logger_dict_' + log_timestamp + '.json', 'w') as fp:
@@ -362,6 +362,7 @@ def log_data(imu_queue):
                 archive.write(image_file)
                 os.remove(image_file)
             archive.close()
+            print("INFO: Archiving done.")
 
         event, values = window.Read(timeout=0, timeout_key='timeout')
 
