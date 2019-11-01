@@ -215,14 +215,14 @@ def acquire_data(sample_freq, capture_window, queue):
                 # Uncomment this to print the raw x-axis accel values for debugging.
                 # print(accel[0])
                 # print(window_dict['imu_timestamp'])
+                
+                queue.put(window_dict)
 
                 # Clear the temporary measurement buffers.
-
                 accel = [[] for i in range(3)]
                 w_vel = [[] for i in range(3)]
                 mag_angle = [[] for i in range(3)]
-                queue.put(window_dict)
-
+                
 
 def log_data(imu_queue):
     """
@@ -302,10 +302,20 @@ def log_data(imu_queue):
                     
                     for item in latest_imu_data_dict.keys():
                         
+                        # Only desync_count isn't a 1-d or 2-d array
                         if item == 'desync_count':            
                             logger_dict[item] = latest_imu_data_dict[item]
+                            
                         else:
-                            logger_dict[item].extend(latest_imu_data_dict[item])
+                            len(latest_imu_data_dict[item])
+                            
+                            # Check if this is a 2-d array. If it is, extend each subarray in turn with new data.
+                            if isinstance(latest_imu_data_dict[item][0], list):
+                                for idx in range(len(latest_imu_data_dict[item])):
+                                    logger_dict[item][idx].extend(latest_imu_data_dict[item][idx])
+                                    
+                            else:        
+                                logger_dict[item].extend(latest_imu_data_dict[item])
                             
                 else:
                     
@@ -338,7 +348,7 @@ def log_data(imu_queue):
 
         if image_capture_count >= 400:
             logging_done = True
-            print("DEBUG: logging done...")
+            print("INFO: logging done. Archiving...")
             logger_dict['camera_timestamp'] = camera_timestamp_array       
             log_timestamp = datetime.datetime.strftime(datetime.datetime.now(), "%m-%d-%Y-%H-%M-%S")
             with open('logger_dict_' + log_timestamp + '.json', 'w') as fp:
@@ -352,6 +362,7 @@ def log_data(imu_queue):
                 archive.write(image_file)
                 os.remove(image_file)
             archive.close()
+            print("INFO: Archiving done.")
 
         event, values = window.Read(timeout=0, timeout_key='timeout')
 
