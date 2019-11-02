@@ -222,6 +222,7 @@ def acquire_data(sample_freq, capture_window, queue):
                 accel = [[] for i in range(3)]
                 w_vel = [[] for i in range(3)]
                 mag_angle = [[] for i in range(3)]
+                imu_timestamp = []
                 
 
 def log_data(imu_queue):
