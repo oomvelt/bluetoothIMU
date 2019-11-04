@@ -5,6 +5,7 @@ import zipfile
 import json
 import natsort
 import math
+import copy
 
 
 def updateFigure(graph, marker_line, data_dict, camera_index, imu_min_value):
@@ -39,6 +40,7 @@ def main():
     data_dict_file = next(filename for filename in file_list if 'logger' in filename)
 
     data_dict = json.load(archive.open(data_dict_file))
+    data_dict['labels'] = ["" for _ in range(len(data_dict['w_vel'][0]))]
 
     print("Loading images...")
     for filename in natsort.natsorted(file_list):
@@ -76,6 +78,7 @@ def main():
                enable_events=True,
                key='slider'),
                sg.Button('Forward', size=(10,1), font='Helvetica 14')],
+              [sg.Button('Mark', size=(10,1), font='Helvetica 14'), sg.Button('Save', size=(10,1), font='Helvetica 14')],
               [sg.Button('Exit', size=(10, 1), font='Helvetica 14')]]
 
     # create the window and show it without the plot
@@ -92,6 +95,7 @@ def main():
     marker_line = imu_graph.DrawLine((0,imu_min_value), (0,imu_max_value), color="yellow", width=2)
     
 
+    mark_state = "idle"
 
     while True:
 
@@ -118,6 +122,35 @@ def main():
             window.Element('image').update(data=image_list[index])
             updateFigure(imu_graph, marker_line, data_dict, index, imu_min_value)
 
+        if event == 'Mark':
+
+            min_imu = min(data_dict['imu_timestamp'], key=lambda this_imu_timestamp: abs(this_imu_timestamp - data_dict['camera_timestamp'][int(values['slider'])]))
+            min_imu_index = data_dict['imu_timestamp'].index(min_imu)
+            print("DEBUG: min_imu, min_imu_index: " + str(min_imu) + " " + str(min_imu_index))
+            
+            if mark_state == "idle":
+                mark_state = "scratching_start"
+                data_dict['labels'][min_imu_index] = "scratching_start"
+                print("INFO: scratching_start index: " + str(min_imu_index))
+
+            elif mark_state == "scratching_start":
+                mark_state = "scratching_stop"
+                data_dict['labels'][min_imu_index] = "scratching_stop"
+                print("INFO: scratching_stop index: " + str(min_imu_index))
+
+            elif mark_state == "scratching_stop":
+                mark_state = "idle"
+
+            else:
+                print("ERROR: Invalid mark_state reached. Exiting...")
+                sys.exit(0)
+
+        if event == 'Save':
+            label_dict = copy.deepcopy(data_dict)
+            del label_dict['camera_timestamp']
+            with open('log_11-02-2019-15-00-36.json', 'w') as fp:
+                json.dump(label_dict, fp)
+            
 
 if __name__ == "__main__":
     main()
